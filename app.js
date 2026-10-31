@@ -66,7 +66,7 @@ function renderHome() {
     const state = scoreMatch(match);
     return `<button class="match-card" data-action="open" data-id="${escape(match.id)}">
       <span class="match-card-top"><span class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</span>
-      <span class="badge ${state.finished ? '' : 'live'}">${state.finished ? 'FINALIZADO' : match.startedAt ? 'EN JUEGO' : 'PREPARADO'}</span></span>
+      <span class="badge ${!state.finished && !match.result && match.runningSince ? 'live' : ''}">${match.result ? match.result.type === 'retirement' ? 'ABANDONO' : 'CIERRE ANTICIPADO' : state.finished ? 'FINALIZADO' : match.pausedAt ? 'PAUSADO' : match.startedAt ? 'EN JUEGO' : 'PREPARADO'}</span></span>
       <span class="match-card-names">${escape(teamName(match.teams[0]))}<span>VS</span>${escape(teamName(match.teams[1]))}</span>
       <span class="match-card-bottom">${state.sets.map(set => set.games ? set.games.join('–') : `${set.tieBreak.join('–')} TB`).join(' · ') || 'Todavía sin sets'} <span>Ver partido →</span></span>
     </button>`;
@@ -104,15 +104,16 @@ function updateSecondServer() {
   second.innerHTML = [0, 1].map(n => `<option value="${other}-${n}">Lado ${other === 0 ? 'A' : 'B'} · Jugador ${n + 1}</option>`).join('');
 }
 
-function setTiles(match, state) {
+function setTiles(match, state, totals, over) {
   return match.teams.map((team, index) => {
     const setCells = [...state.sets.map(set => `<span class="set-cell">${set.games ? set.games[index] : set.tieBreak[index]}</span>`),
       ...Array.from({ length: 3 - state.sets.length }, (_, i) =>
         `<span class="set-cell ${state.setNumber === state.sets.length + i && !state.finished ? 'active-set' : ''}">${state.setNumber === state.sets.length + i && !state.finished ? (state.setNumber === 2 ? state.points[index] : state.games[index]) : '—'}</span>`)
     ].slice(0, 3).join('');
-    return `<div class="score-row ${state.server && team.players.some(player => player.id === state.server) ? 'serving' : ''}">
-      <div class="score-team"><span class="team-letter">${index === 0 ? 'A' : 'B'}</span><div class="score-players">${players(team)}</div></div>
-      <span class="serve-indicator">${state.server && team.players.some(player => player.id === state.server) ? '● SACA' : ''}</span>
+    return `<div class="score-row ${!over && state.server && team.players.some(player => player.id === state.server) ? 'serving' : ''}">
+      <div class="score-team"><span class="team-letter">${index === 0 ? 'A' : 'B'}</span><div class="score-players">${players(team)}
+        <span class="total-points">TANTOS GANADOS <b>${totals[index]}</b></span></div></div>
+      <span class="serve-indicator">${!over && state.server && team.players.some(player => player.id === state.server) ? '● SACA' : ''}</span>
       <div class="set-values">${setCells}</div><strong class="point-value">${state.pointLabels[index]}</strong>
     </div>`;
   });
@@ -122,27 +123,36 @@ function renderMatch() {
   const match = current();
   if (!match) { view = 'home'; renderHome(); return; }
   const state = scoreMatch(match);
+  const over = state.finished || Boolean(match.result);
+  const totals = statistics(match).map(team => team.totalWon);
   const order = match.flipped ? [1, 0] : [0, 1];
-  const tiles = setTiles(match, state);
+  const tiles = setTiles(match, state, totals, over);
   app.innerHTML = `<div class="match-toolbar"><button class="back" data-action="home">← Partidos</button>
-    <span class="badge ${match.startedAt && !state.finished ? 'live' : ''}">${state.finished ? 'PARTIDO FINALIZADO' : match.startedAt ? '● EN VIVO' : 'SIN INICIAR'}</span></div>
+    <span class="badge ${match.runningSince && !over ? 'live' : ''}">${match.result ? match.result.type === 'retirement' ? 'FINALIZADO · ABANDONO' : 'CIERRE ANTICIPADO' : state.finished ? 'PARTIDO FINALIZADO' : match.pausedAt ? 'PARTIDO PAUSADO' : match.startedAt ? '● EN VIVO' : 'SIN INICIAR'}</span></div>
   <section class="match-heading"><div><p class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</p><h1>Tablero<span class="accent">.</span></h1></div>
-  <div class="timer"><span>DURACIÓN DEL PARTIDO</span><strong class="clock">${formatDuration(duration(match))}</strong></div></section>
-  <section class="scoreboard"><div class="board-top"><span>MARCADOR EN VIVO</span><div class="board-labels"><span>SETS</span><span>${state.tieBreak ? 'TIE-BREAK' : 'PUNTOS'}</span></div></div>
+  <div class="timer"><span>TIEMPO DE JUEGO${match.pausedAt ? ' · EN PAUSA' : ''}</span><strong class="clock">${formatDuration(duration(match))}</strong></div></section>
+  <section class="scoreboard"><div class="board-top"><span>${over ? 'MARCADOR FINAL' : match.pausedAt ? 'MARCADOR EN PAUSA' : 'MARCADOR EN VIVO'}</span><div class="board-labels"><span>SETS</span><span>${state.tieBreak ? 'TIE-BREAK' : 'PUNTOS'}</span></div></div>
     ${order.map(i => tiles[i]).join('')}
-    <div class="board-bottom"><span>${state.finished ? `Ganó ${escape(teamName(match.teams[state.wonSets[0] === 2 ? 0 : 1]))}` :
+    <div class="board-bottom"><span>${match.result ? match.result.type === 'retirement' ?
+      `Ganó ${escape(teamName(match.teams[1 - match.result.retiredTeam]))} por abandono de ${escape(teamName(match.teams[match.result.retiredTeam]))}` :
+      `Finalizado anticipadamente · ${escape(match.result.note || 'sin ganador')}` :
+      state.finished ? `Ganó ${escape(teamName(match.teams[state.wonSets[0] === 2 ? 0 : 1]))}` :
       state.setNumber === 2 ? 'MATCH TIE-BREAK · A 10, DIFERENCIA DE 2' : state.tieBreak ? 'TIE-BREAK · A 7, DIFERENCIA DE 2' :
       `SET ${state.setNumber + 1} · ${state.games.join('–')} EN GAMES`}</span>
       <button data-action="flip">⇄ Cambiar lados</button></div></section>
-  ${match.startedAt ? `<div class="server-strip">${state.server ? `${avatar(playerById(match, state.server))}<div><small>SERVICIO ACTUAL</small><strong>${escape(playerById(match, state.server).name)}</strong></div>` :
+  ${match.startedAt ? `<div class="server-strip">${!over && state.server ? `${avatar(playerById(match, state.server))}<div><small>${match.pausedAt ? 'PRÓXIMO SACADOR' : 'SERVICIO ACTUAL'}</small><strong>${escape(playerById(match, state.server).name)}</strong></div>` :
     '<strong>Partido terminado</strong>'}</div>` : ''}
   ${!match.startedAt ? `<div class="start-box"><h2>Todo listo para jugar.</h2><p>El reloj comienza al iniciar. Después podés registrar cada tanto.</p>
     <button class="button primary large" data-action="start">▶ Iniciar partido</button></div>` :
-    !state.finished ? `<section class="point-entry"><div class="section-head compact"><div><p class="eyebrow">REGISTRO EN VIVO</p><h2>¿Quién ganó el tanto?</h2></div></div>
+    !over && !match.pausedAt ? `<section class="point-entry"><div class="section-head compact"><div><p class="eyebrow">REGISTRO EN VIVO</p><h2>¿Quién ganó el tanto?</h2></div></div>
     <div class="winner-buttons">${order.map(i => `<button class="winner-button" data-action="point" data-winner="${i}"><span>LADO ${i === 0 ? 'A' : 'B'}</span>
       <strong>${escape(teamName(match.teams[i]))}</strong><span>+ Registrar tanto ↗</span></button>`).join('')}</div></section>` :
-    `<div class="start-box finished-box"><span class="eyebrow">GAME · SET · MATCH</span><h2>Partido finalizado</h2>
-    <p>Duración total: <strong>${formatDuration(duration(match))}</strong>. Podés consultar o compartir las estadísticas.</p></div>`}
+    match.pausedAt && !over ? `<div class="start-box paused-box"><span class="eyebrow">INTERRUPCIÓN</span><h2>Partido pausado</h2>
+      <p>El reloj está detenido y no se pueden registrar tantos hasta reanudar.</p><button class="button primary large" data-action="resume">▶ Reanudar partido</button></div>` :
+    `<div class="start-box finished-box"><span class="eyebrow">${match.result ? 'CIERRE ANTICIPADO' : 'GAME · SET · MATCH'}</span><h2>${match.result ? match.result.type === 'retirement' ? 'Finalizado por abandono' : 'Finalizado sin ganador' : 'Partido finalizado'}</h2>
+    <p>Tiempo de juego: <strong>${formatDuration(duration(match))}</strong>. Podés consultar o compartir las estadísticas.</p></div>`}
+  ${match.startedAt && !over ? `<div class="interruption-actions">${match.pausedAt ? '' : '<button class="button outline" data-action="pause">⏸ Pausar partido</button>'}
+    <button class="button outline danger" data-action="end-early">Terminar anticipadamente</button></div>` : ''}
   <div class="match-actions"><button class="button outline" data-action="stats">▤ Estadísticas</button>
     <button class="button outline" data-action="history">◷ Historial ${match.points.length ? `(${match.points.length})` : ''}</button>
     ${match.points.length ? '<button class="button outline" data-action="undo">↶ Deshacer último</button>' : ''}</div>
@@ -174,17 +184,33 @@ function renderPointDialog() {
         `<option value="${i}" ${draft.winner === i ? 'selected' : ''}>${escape(teamName(team))}</option>`).join('')}</select></label>
       <p class="field-label">TIPO DE TANTO</p><div class="category-grid">${Object.entries(CATEGORIES).map(([key, info]) =>
         `<button class="category ${draft.category === key ? 'selected' : ''}" data-action="category" data-category="${key}">${escape(info.label)}</button>`).join('')}</div>
-      <label class="field">Jugador ${category.kind === 'lost' ? 'que cometió el error' : 'que ganó el punto'}
+      <label class="field">${draft.category === 'double_fault' ? 'Sacador que cometió la doble falta' : category.kind === 'lost' ? 'Jugador que cometió el error' : 'Jugador que ganó el punto'}
       <select id="point-actor" ${draft.category === 'ace' || draft.category === 'double_fault' ? 'disabled' : ''}>${actorOptions.map(player =>
         `<option value="${escape(player.id)}" ${draft.actor === player.id ? 'selected' : ''}>${escape(player.name)}</option>`).join('')}</select></label>
+      ${category.kind === 'lost' ? '<p class="attribution-note">Esta falta o error se cuenta en contra del jugador que lo cometió, no del ganador del tanto.</p>' : ''}
       ${valid ? '' : `<p class="validation">El ${draft.category === 'ace' ? 'ace lo gana' : 'punto por doble falta lo pierde'} el equipo que saca. Cambiá el ganador o el tipo de tanto.</p>`}
       <button class="button primary full" data-action="save-point" ${valid ? '' : 'disabled'}>Guardar tanto →</button>
     </section></div>`;
 }
 
+function renderEndDialog() {
+  const match = current();
+  document.querySelector('#dialog-root').innerHTML = `<div class="modal-backdrop" data-action="close-dialog">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head"><div><p class="eyebrow">CIERRE ANTICIPADO</p><h2 id="modal-title">Terminar partido</h2></div>
+      <button class="icon-button" data-action="close-dialog" aria-label="Cerrar">×</button></div>
+      <p class="muted">Se conservarán el marcador y las estadísticas actuales. El reloj se detendrá y no se podrán anotar nuevos tantos.</p>
+      <label class="field">Motivo<select id="end-reason"><option value="retirement">Abandono (gana el rival)</option>
+        <option value="early_end">Otro motivo (sin ganador)</option></select></label>
+      <label class="field" id="retirement-field">Equipo que abandona<select id="retired-team">${match.teams.map((team, i) =>
+        `<option value="${i}">${escape(teamName(team))}</option>`).join('')}</select></label>
+      <label class="field" id="end-note-field" hidden>Motivo del cierre<input id="end-note" maxlength="120" placeholder="Ej.: suspensión definitiva"></label>
+      <button class="button primary full" data-action="confirm-end">Confirmar cierre</button>
+    </section></div>`;
+}
+
 function renderDetails(kind) {
   const match = current();
-  const state = scoreMatch(match);
   const detail = document.querySelector('#detail');
   if (kind === 'history') {
     detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">AUDITORÍA</p><h2>Historial de tantos</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
@@ -196,7 +222,7 @@ function renderDetails(kind) {
     }).reverse().join('')}</div>` : '<p class="muted">Todavía no hay tantos registrados.</p>'}</section>`;
   } else {
     const stats = statistics(match);
-    const row = (label, key) => `<tr><th>${label}</th><td>${stats[0].byCategory[key]}</td><td>${stats[1].byCategory[key]}</td></tr>`;
+    const row = (label, key) => `<tr><th>${label}${CATEGORIES[key].kind === 'lost' ? ' · en contra' : ''}</th><td>${stats[0].byCategory[key]}</td><td>${stats[1].byCategory[key]}</td></tr>`;
     detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">RESUMEN DEL PARTIDO</p><h2>Estadísticas</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
     <div class="stats-scroll"><table><thead><tr><th>ESTADÍSTICA</th><th>${escape(teamName(match.teams[0]))}</th><th>${escape(teamName(match.teams[1]))}</th></tr></thead>
     <tbody><tr class="total-row"><th>Tantos ganados</th><td>${stats[0].totalWon}</td><td>${stats[1].totalWon}</td></tr>
@@ -205,7 +231,7 @@ function renderDetails(kind) {
       `<div><strong>${escape(player.name)} · ${i === 0 ? 'A' : 'B'}</strong><small>${Object.entries(stats[i].players[player.id]).filter(([, count]) => count).map(([key, count]) => `${escape(CATEGORIES[key].label)}: ${count}`).join(' · ') || 'Sin tantos atribuidos'}</small></div>`)).join('')}</div>` : ''}
     <div class="match-actions"><button class="button outline" data-action="share">↗ Compartir / correo</button>
     <button class="button outline" data-action="export-summary">↓ Descargar resumen</button></div>
-    <p class="storage-note">Resumen basado en ${match.points.length} tantos. Un error se atribuye al jugador que lo cometió; los demás al que ejecutó la acción.</p></section>`;
+    <p class="storage-note">Resumen basado en ${match.points.length} tantos. Dobles faltas y errores cuentan para quien los cometió; tantos ganados cuentan para el equipo que sumó el punto.</p></section>`;
   }
   detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -217,12 +243,15 @@ function summary(match) {
   const b = teamName(match.teams[1]);
   return [
     `CANCHA · ${match.type === 'singles' ? 'Singles' : 'Dobles'} · ${date(match.createdAt)}`,
-    `${a} vs ${b}`, `Estado: ${state.finished ? 'Finalizado' : match.startedAt ? 'En juego' : 'Preparado'}`,
+    `${a} vs ${b}`, `Estado: ${match.result ? match.result.type === 'retirement' ?
+      `Finalizado por abandono de ${teamName(match.teams[match.result.retiredTeam])}; ganó ${teamName(match.teams[1 - match.result.retiredTeam])}` :
+      `Finalizado anticipadamente sin ganador${match.result.note ? `: ${match.result.note}` : ''}` :
+      state.finished ? 'Finalizado' : match.pausedAt ? 'Pausado' : match.startedAt ? 'En juego' : 'Preparado'}`,
     `Sets: ${state.sets.map((set, i) => `Set ${i + 1}: ${set.games ? set.games.join('-') : 'Match tie-break ' + set.tieBreak.join('-')}${set.tieBreak && set.games ? ' (tie-break ' + set.tieBreak.join('-') + ')' : ''}`).join(' | ') || 'Sin sets completos'}`,
-    `Duración: ${formatDuration(duration(match))}`, '',
+    `Tiempo de juego (sin pausas): ${formatDuration(duration(match))}`, '',
     `Estadística                         ${a} / ${b}`,
     `Tantos ganados: ${stats[0].totalWon} / ${stats[1].totalWon}`,
-    ...Object.entries(CATEGORIES).map(([key, info]) => `${info.label}: ${stats[0].byCategory[key]} / ${stats[1].byCategory[key]}`),
+    ...Object.entries(CATEGORIES).map(([key, info]) => `${info.label}${info.kind === 'lost' ? ' (en contra)' : ''}: ${stats[0].byCategory[key]} / ${stats[1].byCategory[key]}`),
     '', 'Registro generado con Cancha. Los datos originales permanecen en el dispositivo.'
   ].join('\n');
 }
@@ -247,12 +276,14 @@ function savePoint() {
   let state;
   try { state = scoreMatch(match, points); }
   catch (error) { notify(error.message); return; }
+  if (state.finished && match.result) { notify('El partido ya tuvo un cierre anticipado. Esta corrección lo completaría también por marcador.'); return; }
   const next = { ...match, points };
   const wasFinished = scoreMatch(match).finished;
   if (state.finished && !wasFinished) {
     const finishedAt = index === null ? event.at : Date.now();
     next.elapsedMs = duration(match, finishedAt);
     next.runningSince = null;
+    next.pausedAt = null;
     next.endedAt = finishedAt;
   } else if (!state.finished && wasFinished) {
     next.runningSince = Date.now();
@@ -290,9 +321,15 @@ function validBackup(data) {
       match.serveOrder.some(id => teamOf(match, id) < 0) ||
       match.serveOrder.some((id, i) => teamOf(match, id) === teamOf(match, match.serveOrder[(i + 1) % match.serveOrder.length])) ||
       !Array.isArray(match.points) || !Number.isFinite(match.createdAt) || (match.startedAt && !Number.isFinite(match.startedAt)) ||
-      (match.runningSince && !Number.isFinite(match.runningSince)) || !Number.isFinite(match.elapsedMs) || match.elapsedMs < 0) {
+      (match.runningSince && !Number.isFinite(match.runningSince)) || !Number.isFinite(match.elapsedMs) || match.elapsedMs < 0 ||
+      (match.pausedAt != null && !Number.isFinite(match.pausedAt)) || (match.pausedAt && (match.runningSince || !match.startedAt)) ||
+      (match.result && (!['retirement', 'early_end'].includes(match.result.type) ||
+        (match.result.type === 'retirement' && ![0, 1].includes(match.result.retiredTeam)) ||
+        (match.result.type === 'early_end' && (typeof match.result.note !== 'string' || match.result.note.length > 120)) ||
+        !Number.isFinite(match.result.at) || !match.startedAt || match.runningSince || match.pausedAt))) {
       throw new Error('El respaldo contiene un partido inválido.');
     }
+    if (match.result && scoreMatch(match).finished) throw new Error('Un partido no puede terminar por marcador y por abandono.');
     scoreMatch(match);
   }
   if (new Set(data.matches.map(match => match.id)).size !== data.matches.length) throw new Error('El respaldo contiene partidos duplicados.');
@@ -324,6 +361,28 @@ document.addEventListener('click', async event => {
   if (action === 'start') {
     const now = Date.now();
     updateMatch({ ...match, startedAt: now, runningSince: now });
+  }
+  if (action === 'pause' && match.runningSince && !match.result && !scoreMatch(match).finished) {
+    const now = Date.now();
+    if (updateMatch({ ...match, elapsedMs: duration(match, now), runningSince: null, pausedAt: now })) notify('Partido pausado. El reloj está detenido.');
+  }
+  if (action === 'resume' && match.pausedAt && !match.result && !scoreMatch(match).finished) {
+    if (updateMatch({ ...match, runningSince: Date.now(), pausedAt: null })) notify('Partido reanudado.');
+  }
+  if (action === 'end-early' && match.startedAt && !match.result && !scoreMatch(match).finished) renderEndDialog();
+  if (action === 'confirm-end') {
+    const type = document.querySelector('#end-reason').value;
+    const retiredTeam = Number(document.querySelector('#retired-team').value);
+    const note = document.querySelector('#end-note').value.trim();
+    if (!['retirement', 'early_end'].includes(type) || (type === 'retirement' && ![0, 1].includes(retiredTeam)) ||
+      !match.startedAt || match.result || scoreMatch(match).finished) {
+      notify('No se puede terminar este partido.');
+      return;
+    }
+    const now = Date.now();
+    const result = type === 'retirement' ? { type, retiredTeam, at: now } : { type, note, at: now };
+    if (updateMatch({ ...match, elapsedMs: duration(match, now), runningSince: null, pausedAt: null,
+      endedAt: now, result })) notify('Partido finalizado anticipadamente.');
   }
   if (action === 'point' || action === 'edit') {
     const index = action === 'edit' ? Number(target.dataset.index) : null;
@@ -361,6 +420,10 @@ document.addEventListener('click', async event => {
 
 document.addEventListener('change', async event => {
   if (event.target.id === 'first-server') updateSecondServer();
+  if (event.target.id === 'end-reason') {
+    document.querySelector('#retirement-field').hidden = event.target.value !== 'retirement';
+    document.querySelector('#end-note-field').hidden = event.target.value !== 'early_end';
+  }
   if (event.target.id === 'point-winner') { draft.winner = Number(event.target.value); renderPointDialog(); }
   if (event.target.id === 'point-actor') draft.actor = event.target.value;
   if (event.target.dataset.photo) {
@@ -404,7 +467,7 @@ document.addEventListener('submit', event => {
       fromSlot(`${data.get('second')[0]}-${1 - Number(data.get('second')[2])}`)];
   const now = Date.now();
   const match = { id: uid(), type, teams, serveOrder, points: [], createdAt: now,
-    startedAt: null, endedAt: null, elapsedMs: 0, runningSince: null, flipped: false };
+    startedAt: null, endedAt: null, elapsedMs: 0, runningSince: null, pausedAt: null, result: null, flipped: false };
   if (persist([...matches, match])) { currentId = match.id; view = 'match'; photos = {}; render(); }
 });
 
