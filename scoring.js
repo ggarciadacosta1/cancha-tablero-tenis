@@ -61,6 +61,7 @@ export function scoreMatch(match, events = match.points) {
   let completedGames = 0;
   let finished = false;
   let setNumber = 0;
+  let setStartPointIndex = 0;
   let setGamesPlayed = 0;
   let serveOrder = match.setServeOrders?.[0] || match.serveOrder;
   const wonSets = [0, 0];
@@ -69,7 +70,7 @@ export function scoreMatch(match, events = match.points) {
     throw new Error('El orden inicial de saque es inválido.');
   }
 
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     if (finished) throw new Error('Hay tantos posteriores al final del partido.');
     if (!Number.isInteger(event.winner) || event.winner < 0 || event.winner > 1 || !CATEGORIES[event.category]) {
       throw new Error('El historial contiene un tanto inválido.');
@@ -87,7 +88,9 @@ export function scoreMatch(match, events = match.points) {
       const target = setNumber === 2 ? 10 : 7;
       if (points[event.winner] >= target && points[event.winner] - points[1 - event.winner] >= 2) {
         const score = setNumber === 2 ? [...points] : [7, 6].map((_, i) => i === event.winner ? 7 : 6);
-        sets.push({ games: setNumber === 2 ? null : score, tieBreak: [...points], winner: event.winner });
+        sets.push({ games: setNumber === 2 ? null : score, tieBreak: [...points], winner: event.winner,
+          startPointIndex: setStartPointIndex, endPointIndex: eventIndex });
+        setStartPointIndex = eventIndex + 1;
         wonSets[event.winner]++;
         completedGames++;
         setGamesPlayed++;
@@ -104,7 +107,9 @@ export function scoreMatch(match, events = match.points) {
       setGamesPlayed++;
       points = [0, 0];
       if (games[event.winner] >= 6 && games[event.winner] - games[1 - event.winner] >= 2) {
-        sets.push({ games: [...games], tieBreak: null, winner: event.winner });
+        sets.push({ games: [...games], tieBreak: null, winner: event.winner,
+          startPointIndex: setStartPointIndex, endPointIndex: eventIndex });
+        setStartPointIndex = eventIndex + 1;
         wonSets[event.winner]++;
         games = [0, 0];
         setNumber++;
@@ -116,7 +121,7 @@ export function scoreMatch(match, events = match.points) {
   }
   const tieBreak = !finished && (setNumber === 2 || (games[0] === 6 && games[1] === 6));
   return {
-    sets, wonSets, games, points, completedGames, setGamesPlayed, serveOrder, setNumber, tieBreak, finished,
+    sets, wonSets, games, points, completedGames, setGamesPlayed, serveOrder, setNumber, setStartPointIndex, tieBreak, finished,
     server: finished ? null : serverFor(match, { setNumber, games, points, setGamesPlayed, serveOrder }),
     pointLabels: finished ? ['—', '—'] : tieBreak ? points.map(String) : [gamePointLabel(points, 0), gamePointLabel(points, 1)]
   };
@@ -132,13 +137,13 @@ export function serverFor(match, state) {
   return order[(gamesPlayed + offset) % order.length];
 }
 
-export function statistics(match) {
+export function statistics(match, points = match.points) {
   const stats = match.teams.map(team => ({
     totalWon: 0,
     byCategory: Object.fromEntries(Object.keys(CATEGORIES).map(category => [category, 0])),
     players: Object.fromEntries(team.players.map(player => [player.id, Object.fromEntries(Object.keys(CATEGORIES).map(category => [category, 0]))]))
   }));
-  for (const point of match.points) {
+  for (const point of points) {
     stats[point.winner].totalWon++;
     const team = CATEGORIES[point.category].kind === 'lost' ? 1 - point.winner : point.winner;
     stats[team].byCategory[point.category]++;
@@ -149,4 +154,27 @@ export function statistics(match) {
 
 export function duration(match, now = Date.now()) {
   return (match.elapsedMs || 0) + (match.runningSince ? Math.max(0, now - match.runningSince) : 0);
+}
+
+export function setBreakdown(match, now = Date.now()) {
+  const state = scoreMatch(match);
+  const sets = state.sets.map((set, index) => {
+    const start = index === 0 ? 0 : match.points[state.sets[index - 1].endPointIndex].playMs;
+    const end = match.points[set.endPointIndex].playMs;
+    return {
+      number: index + 1, complete: true,
+      points: match.points.slice(set.startPointIndex, set.endPointIndex + 1),
+      durationMs: Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null
+    };
+  });
+  if (!state.finished) {
+    const start = state.setNumber === 0 ? 0 : match.points[state.sets.at(-1).endPointIndex].playMs;
+    const end = duration(match, now);
+    sets.push({
+      number: state.setNumber + 1, complete: false,
+      points: match.points.slice(state.setStartPointIndex),
+      durationMs: Number.isFinite(start) && end >= start ? end - start : null
+    });
+  }
+  return sets;
 }

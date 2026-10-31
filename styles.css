@@ -127,6 +127,12 @@ h3{font-size:23px}
 .paused-box{background:#edf1e8}
 .finished-box{background:#ecf3dc}
 .detail{background:#fff;border:1px solid #e0e5d9;border-radius:12px;padding:25px;margin-top:30px;scroll-margin-top:15px}
+.stats-scopes{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+.duration-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.duration-card{background:#f4f6f0;border-radius:9px;padding:16px;min-width:0}
+.duration-card small{display:block;color:#607568;font-size:10px;font-weight:800;letter-spacing:1px;line-height:1.4;margin-bottom:7px}
+.duration-card strong{font:700 23px "Space Grotesk",sans-serif;font-variant-numeric:tabular-nums}
+.stats-current{font-size:13px;font-weight:700;color:#476247;margin:20px 0 8px}
 .stats-scroll{overflow:auto}
 table{width:100%;border-collapse:collapse;min-width:460px;text-align:right;font-size:14px}
 th:first-child{text-align:left}
@@ -186,4 +192,5 @@ thead th{font-size:11px;color:#698074;letter-spacing:.4px}
   .match-actions .button{flex:1}.head-actions{justify-content:flex-end}
   .server-strip{flex-wrap:wrap}.server-strip .change-server{width:100%;margin-left:0}
   .modal{padding:18px}.category-grid{gap:7px}.category{font-size:12px}
+  .detail{padding:16px}.stats-scopes .button{flex:1}
 }

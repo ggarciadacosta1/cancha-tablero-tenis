@@ -1,4 +1,4 @@
-import { CATEGORIES, duration, formatDuration, playerById, scoreMatch, statistics, teamOf, validServeOrder } from './scoring.js';
+import { CATEGORIES, duration, formatDuration, playerById, scoreMatch, setBreakdown, statistics, teamOf, validServeOrder } from './scoring.js';
 
 const KEY = 'cancha-matches-v1';
 const app = document.querySelector('#app');
@@ -10,6 +10,7 @@ let draft = null;
 let serveDraft = null;
 let photos = {};
 let loadError = null;
+let statsScope = 'all';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -245,9 +246,10 @@ function renderEndDialog() {
     </section></div>`;
 }
 
-function renderDetails(kind) {
+function renderDetails(kind, scope = 'all') {
   const match = current();
   const detail = document.querySelector('#detail');
+  statsScope = kind === 'stats' ? scope : 'all';
   if (kind === 'history') {
     detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">AUDITORÍA</p><h2>Historial de tantos</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
     ${match.points.length ? `<div class="history-list">${match.points.map((point, index) => {
@@ -257,9 +259,20 @@ function renderDetails(kind) {
         <button class="button subtle" data-action="edit" data-index="${index}">Corregir</button></div>`;
     }).reverse().join('')}</div>` : '<p class="muted">Todavía no hay tantos registrados.</p>'}</section>`;
   } else {
-    const stats = statistics(match);
+    const sets = setBreakdown(match);
+    const selected = scope === 'all' ? null : sets[Number(scope)];
+    if (scope !== 'all' && !selected) { notify('El set seleccionado ya no está disponible.'); return; }
+    const points = selected ? selected.points : match.points;
+    const stats = statistics(match, points);
     const row = (label, key) => `<tr><th>${label}${CATEGORIES[key].kind === 'lost' ? ' · en contra' : ''}</th><td>${stats[0].byCategory[key]}</td><td>${stats[1].byCategory[key]}</td></tr>`;
     detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">RESUMEN DEL PARTIDO</p><h2>Estadísticas</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
+    <div class="stats-scopes"><button class="button ${scope === 'all' ? 'primary' : 'outline'}" data-action="stats-scope" data-set="all" aria-pressed="${scope === 'all'}">Todo el partido</button>
+    ${sets.map((set, index) => `<button class="button ${scope === String(index) ? 'primary' : 'outline'}" data-action="stats-scope" data-set="${index}" aria-pressed="${scope === String(index)}">Set ${set.number}${set.complete ? '' : match.result ? ' · sin completar' : !match.startedAt ? ' · sin iniciar' : match.pausedAt ? ' · en pausa' : ' · en curso'}</button>`).join('')}</div>
+    <div class="duration-cards"><div class="duration-card"><small>TIEMPO DE JUEGO · PARTIDO</small><strong data-match-clock>${formatDuration(duration(match))}</strong></div>
+    ${sets.map(set => `<div class="duration-card"><small>SET ${set.number}${set.complete ? '' : ' · SIN COMPLETAR'}</small>
+      <strong ${!set.complete && set.durationMs !== null ? 'data-set-clock' : ''}>${set.durationMs === null ? 'No disponible' : formatDuration(set.durationMs)}</strong></div>`).join('')}</div>
+    ${sets.some(set => set.durationMs === null) ? '<p class="storage-note">Los tantos anteriores a esta actualización no guardaban el tiempo de juego al anotarse; su duración por set no se puede recuperar con precisión.</p>' : ''}
+    <p class="stats-current">Mostrando ${selected ? `Set ${selected.number}` : 'todo el partido'} · ${points.length} tantos</p>
     <div class="stats-scroll"><table><thead><tr><th>ESTADÍSTICA</th><th>${escape(teamName(match.teams[0]))}</th><th>${escape(teamName(match.teams[1]))}</th></tr></thead>
     <tbody><tr class="total-row"><th>Tantos ganados</th><td>${stats[0].totalWon}</td><td>${stats[1].totalWon}</td></tr>
     ${Object.entries(CATEGORIES).map(([key, info]) => row(info.label, key)).join('')}</tbody></table></div>
@@ -267,14 +280,16 @@ function renderDetails(kind) {
       `<div><strong>${escape(player.name)} · ${i === 0 ? 'A' : 'B'}</strong><small>${Object.entries(stats[i].players[player.id]).filter(([, count]) => count).map(([key, count]) => `${escape(CATEGORIES[key].label)}: ${count}`).join(' · ') || 'Sin tantos atribuidos'}</small></div>`)).join('')}</div>` : ''}
     <div class="match-actions"><button class="button outline" data-action="share">↗ Compartir / correo</button>
     <button class="button outline" data-action="export-summary">↓ Descargar resumen</button></div>
-    <p class="storage-note">Resumen basado en ${match.points.length} tantos. Dobles faltas y errores cuentan para quien los cometió; tantos ganados cuentan para el equipo que sumó el punto.</p></section>`;
+    <p class="storage-note">Dobles faltas y errores cuentan para quien los cometió; tantos ganados cuentan para el equipo que sumó el punto.</p></section>`;
   }
-  detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scope === 'all' || kind === 'history') detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function summary(match) {
+function summary(match, scope = 'all') {
   const state = scoreMatch(match);
-  const stats = statistics(match);
+  const sets = setBreakdown(match);
+  const selected = scope === 'all' ? null : sets[Number(scope)];
+  const stats = statistics(match, selected ? selected.points : match.points);
   const a = teamName(match.teams[0]);
   const b = teamName(match.teams[1]);
   return [
@@ -284,8 +299,9 @@ function summary(match) {
       `Finalizado anticipadamente sin ganador${match.result.note ? `: ${match.result.note}` : ''}` :
       state.finished ? 'Finalizado' : match.pausedAt ? 'Pausado' : match.startedAt ? 'En juego' : 'Preparado'}`,
     `Sets: ${state.sets.map((set, i) => `Set ${i + 1}: ${set.games ? set.games.join('-') : 'Match tie-break ' + set.tieBreak.join('-')}${set.tieBreak && set.games ? ' (tie-break ' + set.tieBreak.join('-') + ')' : ''}`).join(' | ') || 'Sin sets completos'}`,
-    `Tiempo de juego (sin pausas): ${formatDuration(duration(match))}`, '',
-    `Estadística                         ${a} / ${b}`,
+    `Tiempo de juego del partido (sin pausas): ${formatDuration(duration(match))}`,
+    `Tiempos por set: ${sets.map(set => `Set ${set.number}${set.complete ? '' : ' (sin completar)'}: ${set.durationMs === null ? 'no disponible' : formatDuration(set.durationMs)}`).join(' | ')}`, '',
+    `Estadística ${selected ? `Set ${selected.number}` : 'del partido completo'} (${selected ? selected.points.length : match.points.length} tantos) · ${a} / ${b}`,
     `Tantos ganados: ${stats[0].totalWon} / ${stats[1].totalWon}`,
     ...Object.entries(CATEGORIES).map(([key, info]) => `${info.label}${info.kind === 'lost' ? ' (en contra)' : ''}: ${stats[0].byCategory[key]} / ${stats[1].byCategory[key]}`),
     '', 'Registro generado con Cancha. Los datos originales permanecen en el dispositivo.'
@@ -307,6 +323,8 @@ function savePoint() {
   const match = current();
   const index = draft.index;
   const event = { winner: draft.winner, category: draft.category, actor: draft.actor, at: index === null ? Date.now() : match.points[index].at };
+  if (index === null) event.playMs = duration(match, event.at);
+  else if (Number.isFinite(match.points[index].playMs)) event.playMs = match.points[index].playMs;
   const points = [...match.points];
   if (index === null) points.push(event); else points[index] = event;
   let state;
@@ -317,6 +335,7 @@ function savePoint() {
   const wasFinished = scoreMatch(match).finished;
   if (state.finished && !wasFinished) {
     const finishedAt = index === null ? event.at : Date.now();
+    if (index !== null && Number.isFinite(event.playMs)) event.playMs = duration(match, finishedAt);
     next.elapsedMs = duration(match, finishedAt);
     next.runningSince = null;
     next.pausedAt = null;
@@ -356,7 +375,9 @@ function validBackup(data) {
       (match.setServeOrders != null && (match.type !== 'doubles' || typeof match.setServeOrders !== 'object' ||
         Array.isArray(match.setServeOrders) || Object.entries(match.setServeOrders).some(([set, order]) =>
           !/^[012]$/.test(set) || !validServeOrder(match, order)))) ||
-      !Array.isArray(match.points) || !Number.isFinite(match.createdAt) || (match.startedAt && !Number.isFinite(match.startedAt)) ||
+      !Array.isArray(match.points) || match.points.some(point => point.playMs != null &&
+        (!Number.isFinite(point.playMs) || point.playMs < 0)) ||
+      !Number.isFinite(match.createdAt) || (match.startedAt && !Number.isFinite(match.startedAt)) ||
       (match.runningSince && !Number.isFinite(match.runningSince)) || !Number.isFinite(match.elapsedMs) || match.elapsedMs < 0 ||
       (match.pausedAt != null && !Number.isFinite(match.pausedAt)) || (match.pausedAt && (match.runningSince || !match.startedAt)) ||
       (match.result && (!['retirement', 'early_end'].includes(match.result.type) ||
@@ -504,12 +525,13 @@ document.addEventListener('click', async event => {
     }
   }
   if (action === 'stats' || action === 'history') renderDetails(action);
+  if (action === 'stats-scope') renderDetails('stats', target.dataset.set);
   if (action === 'hide-detail') document.querySelector('#detail').innerHTML = '';
   if (action === 'backup') download(`cancha-respaldo-${new Date().toISOString().slice(0, 10)}.json`,
     JSON.stringify({ version: 1, exportedAt: Date.now(), matches }, null, 2), 'application/json');
-  if (action === 'export-summary') download(`cancha-partido-${match.id.slice(0, 8)}.txt`, summary(match), 'text/plain;charset=utf-8');
+  if (action === 'export-summary') download(`cancha-partido-${match.id.slice(0, 8)}.txt`, summary(match, statsScope), 'text/plain;charset=utf-8');
   if (action === 'share') {
-    const text = summary(match);
+    const text = summary(match, statsScope);
     if (navigator.share) {
       try { await navigator.share({ title: 'Resumen del partido · Cancha', text }); }
       catch (error) { if (error.name !== 'AbortError') notify(`No se pudo compartir: ${error.message}`); }
@@ -581,6 +603,10 @@ setInterval(() => {
   if (view !== 'match' || !current()) return;
   const clock = document.querySelector('.clock');
   if (clock) clock.textContent = formatDuration(duration(current()));
+  const matchClock = document.querySelector('[data-match-clock]');
+  if (matchClock) matchClock.textContent = formatDuration(duration(current()));
+  const setClock = document.querySelector('[data-set-clock]');
+  if (setClock) setClock.textContent = formatDuration(setBreakdown(current()).at(-1).durationMs);
 }, 1000);
 try {
   const raw = localStorage.getItem(KEY);
