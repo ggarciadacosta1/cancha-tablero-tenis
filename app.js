@@ -419,7 +419,7 @@ document.addEventListener('click', async event => {
   const match = current();
   if (action === 'home') { event.preventDefault(); view = 'home'; draft = null; serveDraft = null; render(); }
   if (action === 'new') { view = 'setup'; photos = {}; render(); }
-  if (action === 'type') { const description = document.querySelector('[name="description"]').value; photos = {}; renderSetup(target.dataset.type, description); }
+  if (action === 'type') { const description = document.querySelector('#setup-form [name="description"]').value; photos = {}; renderSetup(target.dataset.type, description); }
   if (action === 'open') { currentId = target.dataset.id; view = 'match'; render(); }
   if (action === 'flip') updateMatch({ ...match, flipped: !match.flipped });
   if (action === 'start') {
