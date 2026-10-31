@@ -52,6 +52,7 @@ h3{font-size:23px}
 .badge{background:#edf0e7;color:#557066;border-radius:20px;padding:8px 11px;white-space:nowrap;font-size:10px}
 .badge.live{background:#dff0c0;color:#3b6425}
 .match-card-names{font:700 21px "Space Grotesk",sans-serif;display:flex;flex-wrap:wrap;align-items:center;gap:9px;overflow-wrap:anywhere}
+.match-card-description{font:700 15px "Space Grotesk",sans-serif;color:#315a45;overflow-wrap:anywhere}
 .match-card-names span{color:#91a28e;font:800 10px "DM Sans",sans-serif}
 .match-card-bottom{border-top:1px solid #e8ebe4;padding-top:13px;color:#5e7065;font-size:13px}
 .match-card-bottom span{color:#315a45;font-weight:700}
@@ -73,6 +74,7 @@ h3{font-size:23px}
 .field{display:flex;flex-direction:column;gap:8px;color:#355448;font-weight:700;font-size:13px;margin-bottom:16px}
 .field input,.field select{width:100%;border:1px solid #d2dcd1;border-radius:8px;background:#fff;color:#142d27;padding:13px;font-size:16px;min-height:48px}
 .field input::placeholder{color:#9cad9d}
+.match-description-field{margin:22px 0 0}
 .photo-field{display:inline-flex;align-items:center;min-height:44px;color:#496b50;border:1px dashed #9fb499;border-radius:8px;padding:11px 15px;cursor:pointer;font-size:13px;font-weight:700}
 .photo-actions{display:flex;flex-wrap:wrap;gap:8px}
 .photo-label{display:block;font-size:12px;color:#56794d;margin-top:7px;overflow-wrap:anywhere}
@@ -80,6 +82,7 @@ h3{font-size:23px}
 .match-toolbar{display:flex;justify-content:space-between;align-items:center;padding-top:28px}
 .match-heading{display:flex;justify-content:space-between;align-items:end;padding:37px 0 24px;gap:18px}
 .match-heading h1{margin:0}
+.match-description{color:#365b46;font:700 clamp(16px,2.4vw,22px) "Space Grotesk",sans-serif;margin:12px 0 0;overflow-wrap:anywhere}
 .timer{text-align:right}
 .timer span,.server-strip small{display:block;color:#7a887c;font-size:10px;letter-spacing:1.4px;font-weight:800;margin-bottom:6px}
 .timer strong{font:700 clamp(25px,4vw,42px) "Space Grotesk",sans-serif;font-variant-numeric:tabular-nums}
@@ -127,6 +130,7 @@ h3{font-size:23px}
 .paused-box{background:#edf1e8}
 .finished-box{background:#ecf3dc}
 .detail{background:#fff;border:1px solid #e0e5d9;border-radius:12px;padding:25px;margin-top:30px;scroll-margin-top:15px}
+.stats-description{color:#365b46;font:700 18px "Space Grotesk",sans-serif;overflow-wrap:anywhere;margin:0 0 16px}
 .stats-scopes{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
 .duration-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
 .duration-card{background:#f4f6f0;border-radius:9px;padding:16px;min-width:0}

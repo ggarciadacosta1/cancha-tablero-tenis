@@ -70,6 +70,7 @@ function renderHome() {
     return `<button class="match-card" data-action="open" data-id="${escape(match.id)}">
       <span class="match-card-top"><span class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</span>
       <span class="badge ${!state.finished && !match.result && match.runningSince ? 'live' : ''}">${match.result ? match.result.type === 'retirement' ? 'ABANDONO' : 'CIERRE ANTICIPADO' : state.finished ? 'FINALIZADO' : match.pausedAt ? 'PAUSADO' : match.startedAt ? 'EN JUEGO' : 'PREPARADO'}</span></span>
+      ${match.description ? `<span class="match-card-description">${escape(match.description)}</span>` : ''}
       <span class="match-card-names">${escape(teamName(match.teams[0]))}<span>VS</span>${escape(teamName(match.teams[1]))}</span>
       <span class="match-card-bottom">${state.sets.map(set => set.games ? set.games.join('–') : `${set.tieBreak.join('–')} TB`).join(' · ') || 'Todavía sin sets'} <span>Ver partido →</span></span>
     </button>`;
@@ -77,14 +78,16 @@ function renderHome() {
   <p class="storage-note">Los datos se guardan solo en este navegador. Exportá un respaldo periódicamente; borrar los datos del navegador también borra los partidos.</p>`;
 }
 
-function renderSetup(type = 'singles') {
+function renderSetup(type = 'singles', description = '') {
   const doubles = type === 'doubles';
   const slots = doubles ? [[0, 0], [1, 0], [0, 1], [1, 1]] : [[0, 0], [1, 0]];
   app.innerHTML = `<section class="page-title"><button class="back" data-action="home">← Partidos</button><p class="eyebrow">CONFIGURACIÓN</p><h1>Nuevo partido<span class="accent">.</span></h1>
   <p>Ingresá los jugadores y definí el orden de saque antes de comenzar.</p></section>
   <form id="setup-form"><div class="panel"><div class="section-head compact"><div><p class="eyebrow">01 / MODALIDAD</p><h2>Tipo de partido</h2></div></div>
   <div class="segmented"><button type="button" class="${doubles ? '' : 'active'}" data-action="type" data-type="singles">Singles</button>
-  <button type="button" class="${doubles ? 'active' : ''}" data-action="type" data-type="doubles">Dobles</button></div></div>
+  <button type="button" class="${doubles ? 'active' : ''}" data-action="type" data-type="doubles">Dobles</button></div>
+  <label class="field match-description-field">Detalle del partido (opcional)
+    <input name="description" maxlength="120" placeholder="Ej.: Copa Semis club A vs club B" value="${escape(description)}" autocomplete="off"></label></div>
   <div class="panel"><div class="section-head compact"><div><p class="eyebrow">02 / PARTICIPANTES</p><h2>Jugadores</h2></div><span class="muted">Foto opcional</span></div>
   <div class="setup-teams">${[0, 1].map(t => `<div class="setup-team"><p class="team-tag">LADO ${t === 0 ? 'A' : 'B'}</p>
     ${slots.filter(([team]) => team === t).map(([team, number]) => `<label class="field">Jugador ${number + 1}
@@ -133,7 +136,8 @@ function renderMatch() {
   const tiles = setTiles(match, state, totals, over);
   app.innerHTML = `<div class="match-toolbar"><button class="back" data-action="home">← Partidos</button>
     <span class="badge ${match.runningSince && !over ? 'live' : ''}">${match.result ? match.result.type === 'retirement' ? 'FINALIZADO · ABANDONO' : 'CIERRE ANTICIPADO' : state.finished ? 'PARTIDO FINALIZADO' : match.pausedAt ? 'PARTIDO PAUSADO' : match.startedAt ? '● EN VIVO' : 'SIN INICIAR'}</span></div>
-  <section class="match-heading"><div><p class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</p><h1>Tablero<span class="accent">.</span></h1></div>
+  <section class="match-heading"><div><p class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</p><h1>Tablero<span class="accent">.</span></h1>
+    ${match.description ? `<p class="match-description">${escape(match.description)}</p>` : ''}</div>
   <div class="timer"><span>TIEMPO DE JUEGO${match.pausedAt ? ' · EN PAUSA' : ''}</span><strong class="clock">${formatDuration(duration(match))}</strong></div></section>
   <section class="scoreboard"><div class="board-top"><span>${over ? 'MARCADOR FINAL' : match.pausedAt ? 'MARCADOR EN PAUSA' : 'MARCADOR EN VIVO'}</span><div class="board-labels"><span>SETS</span><span>${state.tieBreak ? 'TIE-BREAK' : 'PUNTOS'}</span></div></div>
     ${order.map(i => tiles[i]).join('')}
@@ -266,6 +270,7 @@ function renderDetails(kind, scope = 'all') {
     const stats = statistics(match, points);
     const row = (label, key) => `<tr><th>${label}${CATEGORIES[key].kind === 'lost' ? ' · en contra' : ''}</th><td>${stats[0].byCategory[key]}</td><td>${stats[1].byCategory[key]}</td></tr>`;
     detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">RESUMEN DEL PARTIDO</p><h2>Estadísticas</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
+    ${match.description ? `<p class="stats-description">${escape(match.description)}</p>` : ''}
     <div class="stats-scopes"><button class="button ${scope === 'all' ? 'primary' : 'outline'}" data-action="stats-scope" data-set="all" aria-pressed="${scope === 'all'}">Todo el partido</button>
     ${sets.map((set, index) => `<button class="button ${scope === String(index) ? 'primary' : 'outline'}" data-action="stats-scope" data-set="${index}" aria-pressed="${scope === String(index)}">Set ${set.number}${set.complete ? '' : match.result ? ' · sin completar' : !match.startedAt ? ' · sin iniciar' : match.pausedAt ? ' · en pausa' : ' · en curso'}</button>`).join('')}</div>
     <div class="duration-cards"><div class="duration-card"><small>TIEMPO DE JUEGO · PARTIDO</small><strong data-match-clock>${formatDuration(duration(match))}</strong></div>
@@ -294,6 +299,7 @@ function summary(match, scope = 'all') {
   const b = teamName(match.teams[1]);
   return [
     `CANCHA · ${match.type === 'singles' ? 'Singles' : 'Dobles'} · ${date(match.createdAt)}`,
+    ...(match.description ? [`Detalle: ${match.description}`] : []),
     `${a} vs ${b}`, `Estado: ${match.result ? match.result.type === 'retirement' ?
       `Finalizado por abandono de ${teamName(match.teams[match.result.retiredTeam])}; ganó ${teamName(match.teams[1 - match.result.retiredTeam])}` :
       `Finalizado anticipadamente sin ganador${match.result.note ? `: ${match.result.note}` : ''}` :
@@ -367,6 +373,7 @@ function validBackup(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.matches)) throw new Error('Formato de respaldo no reconocido.');
   for (const match of data.matches) {
     if (!match || typeof match.id !== 'string' || !['singles', 'doubles'].includes(match.type) ||
+      (match.description != null && (typeof match.description !== 'string' || match.description.length > 120)) ||
       !Array.isArray(match.teams) || match.teams.length !== 2 ||
       match.teams.some(team => !Array.isArray(team.players) || team.players.length !== (match.type === 'singles' ? 1 : 2) ||
         team.players.some(p => typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim() ||
@@ -412,7 +419,7 @@ document.addEventListener('click', async event => {
   const match = current();
   if (action === 'home') { event.preventDefault(); view = 'home'; draft = null; serveDraft = null; render(); }
   if (action === 'new') { view = 'setup'; photos = {}; render(); }
-  if (action === 'type') { photos = {}; renderSetup(target.dataset.type); }
+  if (action === 'type') { const description = document.querySelector('[name="description"]').value; photos = {}; renderSetup(target.dataset.type, description); }
   if (action === 'open') { currentId = target.dataset.id; view = 'match'; render(); }
   if (action === 'flip') updateMatch({ ...match, flipped: !match.flipped });
   if (action === 'start') {
@@ -587,7 +594,7 @@ document.addEventListener('submit', event => {
     [fromSlot(first), fromSlot(data.get('second')), fromSlot(`${first[0]}-${1 - Number(first[2])}`),
       fromSlot(`${data.get('second')[0]}-${1 - Number(data.get('second')[2])}`)];
   const now = Date.now();
-  const match = { id: uid(), type, teams, serveOrder, points: [], createdAt: now,
+  const match = { id: uid(), type, description: data.get('description').trim(), teams, serveOrder, points: [], createdAt: now,
     startedAt: null, endedAt: null, elapsedMs: 0, runningSince: null, pausedAt: null, result: null, flipped: false };
   if (persist([...matches, match])) { currentId = match.id; view = 'match'; photos = {}; render(); }
 });
