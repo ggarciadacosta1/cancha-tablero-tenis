@@ -48,8 +48,9 @@ function avatar(player) {
     `<span class="avatar fallback" aria-hidden="true">${escape(player.name.slice(0, 1).toUpperCase())}</span>`;
 }
 
-function players(team) {
-  return team.players.map(player => `<span class="player-name">${avatar(player)}${escape(player.name)}</span>`).join('');
+function players(team, server) {
+  return team.players.map(player => `<span class="player-name">${avatar(player)}${escape(player.name)}${player.id === server ?
+    '<span class="player-serve-dot" aria-label="Sacador" title="Sacador">●</span>' : ''}</span>`).join('');
 }
 
 function renderHome() {
@@ -91,7 +92,7 @@ function renderSetup(type = 'singles') {
     <label class="photo-field">◉ Tomar foto <input type="file" data-photo="${team}-${number}" accept="image/*" capture="environment" hidden></label></div>
     <span class="photo-label" id="photo-${team}-${number}"></span>`).join('')}</div>`).join('')}</div></div>
   <div class="panel"><div class="section-head compact"><div><p class="eyebrow">03 / SERVICIO</p><h2>Orden de saque</h2></div></div>
-  <p class="muted">El primer sacador inicia el partido. ${doubles ? 'Elegí quién saca segundo en la pareja rival; luego sacan los respectivos compañeros. El orden permanece fijo.' : 'Después alternan los jugadores.'}</p>
+  <p class="muted">El primer sacador inicia el partido. ${doubles ? 'Elegí quién saca segundo en la pareja rival; luego sacan los respectivos compañeros. Podrás ajustar cada pareja antes de su primer game de servicio en cada set.' : 'Después alternan los jugadores.'}</p>
   <div class="setup-teams"><label class="field">Primer sacador<select name="first" id="first-server">${slots.map(([t, n]) => `<option value="${t}-${n}">Lado ${t === 0 ? 'A' : 'B'} · Jugador ${n + 1}</option>`).join('')}</select></label>
   ${doubles ? `<label class="field">Segundo sacador (rival)<select name="second" id="second-server"></select></label>` : ''}</div></div>
   <div class="setup-submit"><button class="button primary large" type="submit">Crear partido <span>→</span></button></div></form>`;
@@ -113,7 +114,7 @@ function setTiles(match, state, totals, over) {
         `<span class="set-cell ${state.setNumber === state.sets.length + i && !state.finished ? 'active-set' : ''}">${state.setNumber === state.sets.length + i && !state.finished ? (state.setNumber === 2 ? state.points[index] : state.games[index]) : '—'}</span>`)
     ].slice(0, 3).join('');
     return `<div class="score-row ${!over && state.server && team.players.some(player => player.id === state.server) ? 'serving' : ''}">
-      <div class="score-team"><span class="team-letter">${index === 0 ? 'A' : 'B'}</span><div class="score-players">${players(team)}
+      <div class="score-team"><span class="team-letter">${index === 0 ? 'A' : 'B'}</span><div class="score-players">${players(team, over ? null : state.server)}
         <span class="total-points">TANTOS GANADOS <b>${totals[index]}</b></span></div></div>
       <span class="serve-indicator">${!over && state.server && team.players.some(player => player.id === state.server) ? '● SACA' : ''}</span>
       <div class="set-values">${setCells}</div><strong class="point-value">${state.pointLabels[index]}</strong>
@@ -144,12 +145,14 @@ function renderMatch() {
       <button data-action="flip">⇄ Cambiar lados</button></div></section>
   ${match.startedAt ? `<div class="server-strip">${!over && state.server ? `${avatar(playerById(match, state.server))}<div><small>${match.pausedAt ? 'PRÓXIMO SACADOR' : 'SERVICIO ACTUAL'}</small><strong>${escape(playerById(match, state.server).name)}</strong></div>` :
     '<strong>Partido terminado</strong>'}
-    ${match.type === 'doubles' && !over && state.setGamesPlayed === 0 && state.points[0] === 0 && state.points[1] === 0 ?
-      `<button class="button outline change-server" data-action="serve-order">⇄ Orden de saque · Set ${state.setNumber + 1}</button>` : ''}</div>` : ''}
+    ${match.type === 'doubles' && !over && state.setGamesPlayed <= 1 && state.points[0] === 0 && state.points[1] === 0 ?
+      `<button class="button outline change-server" data-action="serve-order">${state.setGamesPlayed === 0 ?
+        `⇄ Orden de saque · Set ${state.setNumber + 1}` : '⇄ Sacador del otro equipo'}</button>` : ''}</div>` : ''}
   ${!match.startedAt ? `<div class="start-box"><h2>Todo listo para jugar.</h2><p>El reloj comienza al iniciar. Después podés registrar cada tanto.</p>
     <button class="button primary large" data-action="start">▶ Iniciar partido</button></div>` :
     !over && !match.pausedAt ? `<section class="point-entry"><div class="section-head compact"><div><p class="eyebrow">REGISTRO EN VIVO</p><h2>¿Quién ganó el tanto?</h2></div></div>
     <div class="winner-buttons">${order.map(i => `<button class="winner-button" data-action="point" data-winner="${i}"><span>LADO ${i === 0 ? 'A' : 'B'}</span>
+      <span class="winner-avatars">${match.teams[i].players.map(avatar).join('')}</span>
       <strong>${escape(teamName(match.teams[i]))}</strong><span>+ Registrar tanto ↗</span></button>`).join('')}</div></section>` :
     match.pausedAt && !over ? `<div class="start-box paused-box"><span class="eyebrow">INTERRUPCIÓN</span><h2>Partido pausado</h2>
       <p>El reloj está detenido y no se pueden registrar tantos hasta reanudar.</p><button class="button primary large" data-action="resume">▶ Reanudar partido</button></div>` :
@@ -159,7 +162,8 @@ function renderMatch() {
     <button class="button outline danger" data-action="end-early">Terminar anticipadamente</button></div>` : ''}
   <div class="match-actions"><button class="button outline" data-action="stats">▤ Estadísticas</button>
     <button class="button outline" data-action="history">◷ Historial ${match.points.length ? `(${match.points.length})` : ''}</button>
-    ${match.points.length ? '<button class="button outline" data-action="undo">↶ Deshacer último</button>' : ''}</div>
+    ${match.points.length ? '<button class="button outline" data-action="undo">↶ Deshacer último</button>' : ''}
+    <button class="button outline danger" data-action="delete-match">Eliminar partido</button></div>
   <div id="detail"></div><div id="dialog-root"></div>`;
 }
 
@@ -187,15 +191,16 @@ function renderPointDialog() {
       <h2 id="modal-title">¿Cómo terminó?</h2></div><button class="icon-button" data-action="close-dialog" aria-label="Cerrar">×</button></div>
       <p class="field-label">EQUIPO QUE GANÓ EL TANTO</p>
       <div class="choice-buttons">${match.teams.map((team, i) =>
-        `<button class="choice-button ${draft.winner === i ? 'selected' : ''}" data-action="winner" data-winner="${i}" aria-pressed="${draft.winner === i}">${escape(teamName(team))}</button>`).join('')}</div>
-      <div class="category-grid">${['lost', 'won'].map(kind =>
+        `<button class="choice-button ${draft.winner === i ? 'selected' : ''}" data-action="winner" data-winner="${i}" aria-pressed="${draft.winner === i}">
+        <span class="choice-avatars">${team.players.map(avatar).join('')}</span>${escape(teamName(team))}</button>`).join('')}</div>
+      <div class="category-grid">${['won', 'lost'].map(kind =>
         `<div class="category-column"><p class="field-label">${kind === 'lost' ? 'ERROR / EN CONTRA' : 'GANADOR / A FAVOR'}</p>
         ${Object.entries(CATEGORIES).filter(([, info]) => info.kind === kind).map(([key, info]) =>
           `<button class="category ${draft.category === key ? 'selected' : ''}" data-action="category" data-category="${key}" aria-pressed="${draft.category === key}">${escape(info.label)}</button>`).join('')}</div>`).join('')}</div>
       <p class="field-label">${draft.category === 'double_fault' ? 'SACADOR QUE COMETIÓ LA DOBLE FALTA' : category.kind === 'lost' ? 'JUGADOR QUE COMETIÓ EL ERROR' : 'JUGADOR QUE GANÓ EL PUNTO'}</p>
-      <div class="choice-buttons">${fixedActor ? `<span class="choice-button selected fixed-choice">${escape(playerById(match, server).name)}</span>` :
+      <div class="choice-buttons">${fixedActor ? `<span class="choice-button selected fixed-choice">${avatar(playerById(match, server))}${escape(playerById(match, server).name)}</span>` :
         actorOptions.map(player =>
-          `<button class="choice-button ${draft.actor === player.id ? 'selected' : ''}" data-action="actor" data-player="${escape(player.id)}" aria-pressed="${draft.actor === player.id}">${escape(player.name)}</button>`).join('')}</div>
+          `<button class="choice-button ${draft.actor === player.id ? 'selected' : ''}" data-action="actor" data-player="${escape(player.id)}" aria-pressed="${draft.actor === player.id}">${avatar(player)}${escape(player.name)}</button>`).join('')}</div>
       ${category.kind === 'lost' ? '<p class="attribution-note">Esta falta o error se cuenta en contra del jugador que lo cometió, no del ganador del tanto.</p>' : ''}
       ${valid ? '' : `<p class="validation">El ${draft.category === 'ace' ? 'ace lo gana' : 'punto por doble falta lo pierde'} el equipo que saca. Cambiá el ganador o el tipo de tanto.</p>`}
       <button class="button primary full" data-action="save-point" ${valid ? '' : 'disabled'}>Guardar tanto →</button>
@@ -204,7 +209,9 @@ function renderPointDialog() {
 
 function renderServeDialog() {
   const match = current();
-  const groups = [
+  const groups = serveDraft.secondOnly ? [
+    { team: 1 - serveDraft.firstTeam, slot: 'second', label: 'SACA ESTE GAME' }
+  ] : [
     { team: serveDraft.firstTeam, slot: 'first', label: 'SACA PRIMERO' },
     { team: 1 - serveDraft.firstTeam, slot: 'second', label: 'SACA SEGUNDO' }
   ];
@@ -212,10 +219,12 @@ function renderServeDialog() {
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal-head"><div><p class="eyebrow">SET ${serveDraft.setNumber + 1} · DOBLES</p><h2 id="modal-title">Orden de saque</h2></div>
       <button class="icon-button" data-action="close-dialog" aria-label="Cerrar">×</button></div>
-      <p class="muted">Podés cambiar qué compañero saca primero en cada pareja. El equipo que sirve primero ya está determinado por el turno del partido. El orden queda fijo después del primer tanto de este set.</p>
+      <p class="muted">${serveDraft.secondOnly ?
+        'El primer equipo ya sacó. Ahora el equipo rival puede elegir cuál de sus compañeros sirve su primer game de este set, antes de jugar el primer tanto.' :
+        'Cada pareja puede elegir su sacador antes de su primer game de servicio. El equipo que sirve primero ya está determinado por el turno del partido.'}</p>
       ${groups.map(({ team, slot, label }) => `<p class="field-label">${label} · LADO ${team === 0 ? 'A' : 'B'}</p>
         <div class="choice-buttons">${match.teams[team].players.map(player =>
-          `<button class="choice-button ${serveDraft[slot] === player.id ? 'selected' : ''}" data-action="serve-player" data-slot="${slot}" data-player="${escape(player.id)}" aria-pressed="${serveDraft[slot] === player.id}">${escape(player.name)}</button>`).join('')}</div>`).join('')}
+          `<button class="choice-button ${serveDraft[slot] === player.id ? 'selected' : ''}" data-action="serve-player" data-slot="${slot}" data-player="${escape(player.id)}" aria-pressed="${serveDraft[slot] === player.id}">${avatar(player)}${escape(player.name)}</button>`).join('')}</div>`).join('')}
       <button class="button primary full" data-action="save-serve-order">Guardar orden de saque →</button>
     </section></div>`;
 }
@@ -392,12 +401,12 @@ document.addEventListener('click', async event => {
   if (action === 'serve-order') {
     const state = scoreMatch(match);
     if (match.type !== 'doubles' || !match.startedAt || match.result || state.finished ||
-      state.setGamesPlayed !== 0 || state.points[0] !== 0 || state.points[1] !== 0) {
-      notify('Solo se puede cambiar el orden de saque al inicio de cada set.');
+      state.setGamesPlayed > 1 || state.points[0] !== 0 || state.points[1] !== 0) {
+      notify('Cada pareja elige su sacador antes de su primer game de servicio en el set.');
       return;
     }
-    serveDraft = { setNumber: state.setNumber, firstTeam: teamOf(match, state.server),
-      first: state.serveOrder[0], second: state.serveOrder[1] };
+    serveDraft = { setNumber: state.setNumber, gamesPlayed: state.setGamesPlayed, secondOnly: state.setGamesPlayed === 1,
+      firstTeam: teamOf(match, state.serveOrder[0]), first: state.serveOrder[0], second: state.serveOrder[1] };
     renderServeDialog();
   }
   if (action === 'serve-player') {
@@ -410,9 +419,9 @@ document.addEventListener('click', async event => {
   if (action === 'save-serve-order') {
     const state = scoreMatch(match);
     if (!serveDraft || match.type !== 'doubles' || match.result || state.finished ||
-      state.setNumber !== serveDraft.setNumber || state.setGamesPlayed !== 0 ||
+      state.setNumber !== serveDraft.setNumber || state.setGamesPlayed !== serveDraft.gamesPlayed ||
       state.points[0] !== 0 || state.points[1] !== 0) {
-      notify('El set ya comenzó. No se puede cambiar el orden de saque.');
+      notify('El primer game de servicio de este equipo ya comenzó. No se puede cambiar su sacador.');
       return;
     }
     const firstTeam = serveDraft.firstTeam;
@@ -421,7 +430,8 @@ document.addEventListener('click', async event => {
     const order = [first, second,
       match.teams[firstTeam].players.find(player => player.id !== first).id,
       match.teams[1 - firstTeam].players.find(player => player.id !== second).id];
-    if (!validServeOrder(match, order) || teamOf(match, first) !== teamOf(match, state.server)) {
+    if (!validServeOrder(match, order) || teamOf(match, first) !== teamOf(match, state.serveOrder[0]) ||
+      (serveDraft.secondOnly && first !== state.serveOrder[0])) {
       notify('El orden de saque no corresponde al turno del equipo.');
       return;
     }
@@ -483,6 +493,15 @@ document.addEventListener('click', async event => {
     const next = { ...match, points: match.points.slice(0, -1) };
     if (scoreMatch(match).finished) { next.runningSince = Date.now(); next.endedAt = null; }
     if (updateMatch(next)) notify('Último tanto deshecho.');
+  }
+  if (action === 'delete-match') {
+    if (!confirm(`¿Eliminar de este dispositivo el partido ${teamName(match.teams[0])} vs ${teamName(match.teams[1])}? Se borrarán también sus fotos, tantos y estadísticas. No se puede deshacer; exportá un respaldo antes si querés conservarlo.`)) return;
+    if (persist(matches.filter(saved => saved.id !== match.id))) {
+      currentId = null;
+      view = 'home';
+      render();
+      notify('Partido eliminado de este dispositivo.');
+    }
   }
   if (action === 'stats' || action === 'history') renderDetails(action);
   if (action === 'hide-detail') document.querySelector('#detail').innerHTML = '';
