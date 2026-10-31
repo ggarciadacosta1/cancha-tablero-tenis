@@ -1,5 +1,5 @@
-const CACHE = 'cancha-v2';
-const FILES = ['./', './index.html', './styles.css', './app.js', './scoring.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'cancha-v3';
+const FILES = ['./', './index.html', './styles.css', './app.js', './scoring.js', './sw.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
