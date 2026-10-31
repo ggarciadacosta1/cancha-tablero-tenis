@@ -1,8 +1,13 @@
-const CACHE = 'cancha-v13';
+const CACHE = 'cancha-v14';
 const FILES = ['./', './index.html', './styles.css', './app.js', './scoring.js', './sw.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(cache => Promise.all(FILES.map(async file => {
+    const url = new URL(file, self.registration.scope);
+    const response = await fetch(`${url.href}?v=${CACHE}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`No se pudo guardar ${file} para uso sin conexión.`);
+    await cache.put(url.href, response);
+  }))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
