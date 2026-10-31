@@ -20,6 +20,24 @@ export function playerById(match, id) {
   return match.teams.flatMap(team => team.players).find(player => player.id === id);
 }
 
+export function validServeOrder(match, order) {
+  const players = match.teams.flatMap(team => team.players);
+  return Array.isArray(order) && order.length === players.length &&
+    new Set(order).size === players.length &&
+    order.every((id, i) => players.some(player => player.id === id) &&
+      teamOf(match, id) !== teamOf(match, order[(i + 1) % order.length]));
+}
+
+function nextSetOrder(match, order, gamesPlayed, setNumber, finished) {
+  const rotated = order.map((_, i) => order[(i + gamesPlayed) % order.length]);
+  if (finished) return rotated;
+  const chosen = match.setServeOrders?.[setNumber] || rotated;
+  if (!validServeOrder(match, chosen) || teamOf(match, chosen[0]) !== teamOf(match, rotated[0])) {
+    throw new Error('El orden de saque del set no respeta el turno del equipo que sirve.');
+  }
+  return chosen;
+}
+
 export function formatDuration(ms) {
   const seconds = Math.floor(Math.max(0, ms) / 1000);
   const hours = Math.floor(seconds / 3600);
@@ -43,14 +61,20 @@ export function scoreMatch(match, events = match.points) {
   let completedGames = 0;
   let finished = false;
   let setNumber = 0;
+  let setGamesPlayed = 0;
+  let serveOrder = match.setServeOrders?.[0] || match.serveOrder;
   const wonSets = [0, 0];
+  if (!validServeOrder(match, serveOrder) ||
+    teamOf(match, serveOrder[0]) !== teamOf(match, match.serveOrder[0])) {
+    throw new Error('El orden inicial de saque es inválido.');
+  }
 
   for (const event of events) {
     if (finished) throw new Error('Hay tantos posteriores al final del partido.');
     if (!Number.isInteger(event.winner) || event.winner < 0 || event.winner > 1 || !CATEGORIES[event.category]) {
       throw new Error('El historial contiene un tanto inválido.');
     }
-    const server = serverFor(match, { setNumber, games, points, completedGames });
+    const server = serverFor(match, { setNumber, games, points, setGamesPlayed, serveOrder });
     const actorTeam = CATEGORIES[event.category].kind === 'lost' ? 1 - event.winner : event.winner;
     if (teamOf(match, event.actor) !== actorTeam ||
       (event.category === 'ace' && (event.winner !== teamOf(match, server) || event.actor !== server)) ||
@@ -66,14 +90,18 @@ export function scoreMatch(match, events = match.points) {
         sets.push({ games: setNumber === 2 ? null : score, tieBreak: [...points], winner: event.winner });
         wonSets[event.winner]++;
         completedGames++;
+        setGamesPlayed++;
         games = [0, 0];
         points = [0, 0];
         setNumber++;
         finished = wonSets[event.winner] === 2;
+        serveOrder = nextSetOrder(match, serveOrder, setGamesPlayed, setNumber, finished);
+        setGamesPlayed = 0;
       }
     } else if (points[event.winner] >= 4 && points[event.winner] - points[1 - event.winner] >= 2) {
       games[event.winner]++;
       completedGames++;
+      setGamesPlayed++;
       points = [0, 0];
       if (games[event.winner] >= 6 && games[event.winner] - games[1 - event.winner] >= 2) {
         sets.push({ games: [...games], tieBreak: null, winner: event.winner });
@@ -81,23 +109,27 @@ export function scoreMatch(match, events = match.points) {
         games = [0, 0];
         setNumber++;
         finished = wonSets[event.winner] === 2;
+        serveOrder = nextSetOrder(match, serveOrder, setGamesPlayed, setNumber, finished);
+        setGamesPlayed = 0;
       }
     }
   }
   const tieBreak = !finished && (setNumber === 2 || (games[0] === 6 && games[1] === 6));
   return {
-    sets, wonSets, games, points, completedGames, setNumber, tieBreak, finished,
-    server: finished ? null : serverFor(match, { setNumber, games, points, completedGames }),
+    sets, wonSets, games, points, completedGames, setGamesPlayed, serveOrder, setNumber, tieBreak, finished,
+    server: finished ? null : serverFor(match, { setNumber, games, points, setGamesPlayed, serveOrder }),
     pointLabels: finished ? ['—', '—'] : tieBreak ? points.map(String) : [gamePointLabel(points, 0), gamePointLabel(points, 1)]
   };
 }
 
 export function serverFor(match, state) {
-  const { setNumber, games, points, completedGames } = state;
+  const { setNumber, games, points } = state;
+  const order = state.serveOrder || match.serveOrder;
+  const gamesPlayed = state.setGamesPlayed ?? state.completedGames;
   const tieBreak = setNumber === 2 || (games[0] === 6 && games[1] === 6);
   const pointNumber = points[0] + points[1];
   const offset = tieBreak ? (pointNumber === 0 ? 0 : Math.floor((pointNumber + 1) / 2)) : 0;
-  return match.serveOrder[(completedGames + offset) % match.serveOrder.length];
+  return order[(gamesPlayed + offset) % order.length];
 }
 
 export function statistics(match) {
