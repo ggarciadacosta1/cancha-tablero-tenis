@@ -1,4 +1,4 @@
-const CACHE = 'cancha-v15';
+const CACHE = 'cancha-v16';
 const FILES = ['./', './index.html', './styles.css', './app.js', './scoring.js', './sw.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {

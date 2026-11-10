@@ -7,7 +7,8 @@ export const CATEGORIES = {
   backhand_error: { label: 'Error no forzado · revés', kind: 'lost' },
   net_won: { label: 'Punto ganado en la red', kind: 'won' },
   net_lost: { label: 'Punto perdido en la red', kind: 'lost' },
-  other: { label: 'Otro', kind: 'won' }
+  other: { label: 'Otro', kind: 'won' },
+  simple: { label: 'Tanto registrado', kind: 'won' }
 };
 
 const gameLabels = ['0', '15', '30', '40'];
@@ -77,7 +78,7 @@ export function scoreMatch(match, events = match.points) {
     }
     const server = serverFor(match, { setNumber, games, points, setGamesPlayed, serveOrder });
     const actorTeam = CATEGORIES[event.category].kind === 'lost' ? 1 - event.winner : event.winner;
-    if (teamOf(match, event.actor) !== actorTeam ||
+    if ((event.category === 'simple' ? (match.mode !== 'simple' || event.actor != null) : (match.mode === 'simple' || teamOf(match, event.actor) !== actorTeam)) ||
       (event.category === 'ace' && (event.winner !== teamOf(match, server) || event.actor !== server)) ||
       (event.category === 'double_fault' && (event.winner === teamOf(match, server) || event.actor !== server))) {
       throw new Error('El jugador o el tipo de tanto no corresponde al saque y al ganador.');
@@ -146,6 +147,7 @@ export function statistics(match, points = match.points) {
   for (const point of points) {
     stats[point.winner].totalWon++;
     const team = CATEGORIES[point.category].kind === 'lost' ? 1 - point.winner : point.winner;
+    if (point.category === 'simple') continue;
     stats[team].byCategory[point.category]++;
     if (stats[team].players[point.actor]) stats[team].players[point.actor][point.category]++;
   }

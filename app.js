@@ -11,6 +11,7 @@ let serveDraft = null;
 let photos = {};
 let loadError = null;
 let statsScope = 'all';
+let setupMode = 'simple';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -68,7 +69,7 @@ function renderHome() {
   ${sorted.length ? `<div class="match-list">${sorted.map(match => {
     const state = scoreMatch(match);
     return `<button class="match-card" data-action="open" data-id="${escape(match.id)}">
-      <span class="match-card-top"><span class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${date(match.createdAt)}</span>
+      <span class="match-card-top"><span class="eyebrow">${match.type === 'singles' ? 'SINGLES' : 'DOBLES'} · ${match.mode === 'simple' ? 'MARCADOR SIMPLE' : 'CON ESTADÍSTICAS'} · ${date(match.createdAt)}</span>
       <span class="badge ${!state.finished && !match.result && match.runningSince ? 'live' : ''}">${match.result ? match.result.type === 'retirement' ? 'ABANDONO' : 'CIERRE ANTICIPADO' : state.finished ? 'FINALIZADO' : match.pausedAt ? 'PAUSADO' : match.startedAt ? 'EN JUEGO' : 'PREPARADO'}</span></span>
       ${match.description ? `<span class="match-card-description">${escape(match.description)}</span>` : ''}
       <span class="match-card-names">${escape(teamName(match.teams[0]))}<span>VS</span>${escape(teamName(match.teams[1]))}</span>
@@ -88,14 +89,18 @@ function renderSetup(type = 'singles', description = '') {
   <button type="button" class="${doubles ? 'active' : ''}" data-action="type" data-type="doubles">Dobles</button></div>
   <label class="field match-description-field">Detalle del partido (opcional)
     <input name="description" maxlength="120" placeholder="Ej.: Copa Semis club A vs club B" value="${escape(description)}" autocomplete="off"></label></div>
-  <div class="panel"><div class="section-head compact"><div><p class="eyebrow">02 / PARTICIPANTES</p><h2>Jugadores</h2></div><span class="muted">Foto opcional</span></div>
+  <div class="panel"><div class="section-head compact"><div><p class="eyebrow">02 / REGISTRO</p><h2>Modo de registro</h2></div></div>
+  <div class="segmented"><button type="button" class="${setupMode === 'simple' ? 'active' : ''}" data-action="mode" data-mode="simple">Marcador simple</button>
+  <button type="button" class="${setupMode === 'complete' ? 'active' : ''}" data-action="mode" data-mode="complete">Con estadísticas</button></div>
+  <p class="muted">${setupMode === 'simple' ? 'Un toque registra el ganador del tanto. Se guardan resultado, tantos y duración, sin detalles de golpes.' : 'Registro completo: quién ganó, cómo terminó el tanto y jugador responsable.'}</p></div>
+  <div class="panel"><div class="section-head compact"><div><p class="eyebrow">03 / PARTICIPANTES</p><h2>Jugadores</h2></div><span class="muted">Foto opcional</span></div>
   <div class="setup-teams">${[0, 1].map(t => `<div class="setup-team"><p class="team-tag">LADO ${t === 0 ? 'A' : 'B'}</p>
     ${slots.filter(([team]) => team === t).map(([team, number]) => `<label class="field">Jugador ${number + 1}
     <input required maxlength="60" name="name-${team}-${number}" placeholder="Nombre del jugador" autocomplete="off"></label>
     <div class="photo-actions"><label class="photo-field">▧ Galería <input type="file" data-photo="${team}-${number}" accept="image/*" hidden></label>
     <label class="photo-field">◉ Tomar foto <input type="file" data-photo="${team}-${number}" accept="image/*" capture="environment" hidden></label></div>
     <span class="photo-label" id="photo-${team}-${number}"></span>`).join('')}</div>`).join('')}</div></div>
-  <div class="panel"><div class="section-head compact"><div><p class="eyebrow">03 / SERVICIO</p><h2>Orden de saque</h2></div></div>
+  <div class="panel"><div class="section-head compact"><div><p class="eyebrow">04 / SERVICIO</p><h2>Orden de saque</h2></div></div>
   <p class="muted">El primer sacador inicia el partido. ${doubles ? 'Elegí quién saca segundo en la pareja rival; luego sacan los respectivos compañeros. Podrás ajustar cada pareja antes de su primer game de servicio en cada set.' : 'Después alternan los jugadores.'}</p>
   <div class="setup-teams"><label class="field">Primer sacador<select name="first" id="first-server">${slots.map(([t, n]) => `<option value="${t}-${n}">Lado ${t === 0 ? 'A' : 'B'} · Jugador ${n + 1}</option>`).join('')}</select></label>
   ${doubles ? `<label class="field">Segundo sacador (rival)<select name="second" id="second-server"></select></label>` : ''}</div></div>
@@ -165,7 +170,7 @@ function renderMatch() {
     <p>Tiempo de juego: <strong>${formatDuration(duration(match))}</strong>. Podés consultar o compartir las estadísticas.</p></div>`}
   ${match.startedAt && !over ? `<div class="interruption-actions">${match.pausedAt ? '' : '<button class="button outline" data-action="pause">⏸ Pausar partido</button>'}
     <button class="button outline danger" data-action="end-early">Terminar anticipadamente</button></div>` : ''}
-  <div class="match-actions"><button class="button outline" data-action="stats">▤ Estadísticas</button>
+  <div class="match-actions"><button class="button outline" data-action="stats">▤ ${match.mode === "simple" ? "Resumen" : "Estadísticas"}</button>
     <button class="button outline" data-action="history">◷ Historial ${match.points.length ? `(${match.points.length})` : ''}</button>
     ${match.points.length ? '<button class="button outline" data-action="undo">↶ Deshacer último</button>' : ''}
     <button class="button outline danger" data-action="delete-match">Eliminar partido</button></div>
@@ -259,7 +264,7 @@ function renderDetails(kind, scope = 'all') {
     ${match.points.length ? `<div class="history-list">${match.points.map((point, index) => {
       const actor = playerById(match, point.actor);
       return `<div class="history-row"><span class="history-number">${String(index + 1).padStart(2, '0')}</span>
-        <div><strong>${escape(teamName(match.teams[point.winner]))}</strong><small>${escape(CATEGORIES[point.category].label)} · ${escape(actor?.name || 'Jugador')} · ${new Date(point.at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</small></div>
+        <div><strong>${escape(teamName(match.teams[point.winner]))}</strong><small>${point.category === 'simple' ? 'Tanto registrado' : `${escape(CATEGORIES[point.category].label)} · ${escape(actor?.name || 'Jugador')}`} · ${new Date(point.at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</small></div>
         <button class="button subtle" data-action="edit" data-index="${index}">Corregir</button></div>`;
     }).reverse().join('')}</div>` : '<p class="muted">Todavía no hay tantos registrados.</p>'}</section>`;
   } else {
@@ -269,7 +274,7 @@ function renderDetails(kind, scope = 'all') {
     const points = selected ? selected.points : match.points;
     const stats = statistics(match, points);
     const row = (label, key) => `<tr><th>${label}${CATEGORIES[key].kind === 'lost' ? ' · en contra' : ''}</th><td>${stats[0].byCategory[key]}</td><td>${stats[1].byCategory[key]}</td></tr>`;
-    detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">RESUMEN DEL PARTIDO</p><h2>Estadísticas</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
+    detail.innerHTML = `<section class="detail"><div class="section-head"><div><p class="eyebrow">RESUMEN DEL PARTIDO</p><h2>${match.mode === "simple" ? "Resumen" : "Estadísticas"}</h2></div><button class="button subtle" data-action="hide-detail">Cerrar ×</button></div>
     ${match.description ? `<p class="stats-description">${escape(match.description)}</p>` : ''}
     <div class="stats-scopes"><button class="button ${scope === 'all' ? 'primary' : 'outline'}" data-action="stats-scope" data-set="all" aria-pressed="${scope === 'all'}">Todo el partido</button>
     ${sets.map((set, index) => `<button class="button ${scope === String(index) ? 'primary' : 'outline'}" data-action="stats-scope" data-set="${index}" aria-pressed="${scope === String(index)}">Set ${set.number}${set.complete ? '' : match.result ? ' · sin completar' : !match.startedAt ? ' · sin iniciar' : match.pausedAt ? ' · en pausa' : ' · en curso'}</button>`).join('')}</div>
@@ -280,12 +285,12 @@ function renderDetails(kind, scope = 'all') {
     <p class="stats-current">Mostrando ${selected ? `Set ${selected.number}` : 'todo el partido'} · ${points.length} tantos</p>
     <div class="stats-scroll"><table><thead><tr><th>ESTADÍSTICA</th><th>${escape(teamName(match.teams[0]))}</th><th>${escape(teamName(match.teams[1]))}</th></tr></thead>
     <tbody><tr class="total-row"><th>Tantos ganados</th><td>${stats[0].totalWon}</td><td>${stats[1].totalWon}</td></tr>
-    ${Object.entries(CATEGORIES).map(([key, info]) => row(info.label, key)).join('')}</tbody></table></div>
-    ${match.type === 'doubles' ? `<p class="muted">Detalle individual de tantos atribuidos</p><div class="player-stats">${match.teams.flatMap((team, i) => team.players.map(player =>
+    ${match.mode === 'simple' ? '' : Object.entries(CATEGORIES).filter(([key]) => key !== 'simple').map(([key, info]) => row(info.label, key)).join('')}</tbody></table></div>
+    ${match.type === 'doubles' && match.mode !== 'simple' ? `<p class="muted">Detalle individual de tantos atribuidos</p><div class="player-stats">${match.teams.flatMap((team, i) => team.players.map(player =>
       `<div><strong>${escape(player.name)} · ${i === 0 ? 'A' : 'B'}</strong><small>${Object.entries(stats[i].players[player.id]).filter(([, count]) => count).map(([key, count]) => `${escape(CATEGORIES[key].label)}: ${count}`).join(' · ') || 'Sin tantos atribuidos'}</small></div>`)).join('')}</div>` : ''}
     <div class="match-actions"><button class="button outline" data-action="share">↗ Compartir / correo</button>
     <button class="button outline" data-action="export-summary">↓ Descargar resumen</button></div>
-    <p class="storage-note">Dobles faltas y errores cuentan para quien los cometió; tantos ganados cuentan para el equipo que sumó el punto.</p></section>`;
+    <p class="storage-note">${match.mode === "simple" ? "Este partido registra solamente el equipo ganador de cada tanto." : "Dobles faltas y errores cuentan para quien los cometió; tantos ganados cuentan para el equipo que sumó el punto."}</p></section>`;
   }
   if (scope === 'all' || kind === 'history') detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -309,7 +314,7 @@ function summary(match, scope = 'all') {
     `Tiempos por set: ${sets.map(set => `Set ${set.number}${set.complete ? '' : ' (sin completar)'}: ${set.durationMs === null ? 'no disponible' : formatDuration(set.durationMs)}`).join(' | ')}`, '',
     `Estadística ${selected ? `Set ${selected.number}` : 'del partido completo'} (${selected ? selected.points.length : match.points.length} tantos) · ${a} / ${b}`,
     `Tantos ganados: ${stats[0].totalWon} / ${stats[1].totalWon}`,
-    ...Object.entries(CATEGORIES).map(([key, info]) => `${info.label}${info.kind === 'lost' ? ' (en contra)' : ''}: ${stats[0].byCategory[key]} / ${stats[1].byCategory[key]}`),
+    ...(match.mode === 'simple' ? [] : Object.entries(CATEGORIES).filter(([key]) => key !== 'simple').map(([key, info]) => `${info.label}${info.kind === 'lost' ? ' (en contra)' : ''}: ${stats[0].byCategory[key]} / ${stats[1].byCategory[key]}`)),
     '', 'Registro generado con Cancha. Los datos originales permanecen en el dispositivo.'
   ].join('\n');
 }
@@ -374,6 +379,7 @@ function validBackup(data) {
   for (const match of data.matches) {
     if (!match || typeof match.id !== 'string' || !['singles', 'doubles'].includes(match.type) ||
       (match.description != null && (typeof match.description !== 'string' || match.description.length > 120)) ||
+      (match.mode != null && !['simple', 'complete'].includes(match.mode)) ||
       !Array.isArray(match.teams) || match.teams.length !== 2 ||
       match.teams.some(team => !Array.isArray(team.players) || team.players.length !== (match.type === 'singles' ? 1 : 2) ||
         team.players.some(p => typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim() ||
@@ -418,7 +424,8 @@ document.addEventListener('click', async event => {
   const action = target.dataset.action;
   const match = current();
   if (action === 'home') { event.preventDefault(); view = 'home'; draft = null; serveDraft = null; render(); }
-  if (action === 'new') { view = 'setup'; photos = {}; render(); }
+  if (action === 'new') { view = 'setup'; photos = {}; setupMode = 'simple'; render(); }
+  if (action === 'mode') { setupMode = target.dataset.mode; const description = document.querySelector('#setup-form [name="description"]').value; renderSetup(document.querySelector('#second-server') ? 'doubles' : 'singles', description); }
   if (action === 'type') { const description = document.querySelector('#setup-form [name="description"]').value; photos = {}; renderSetup(target.dataset.type, description); }
   if (action === 'open') { currentId = target.dataset.id; view = 'match'; render(); }
   if (action === 'flip') updateMatch({ ...match, flipped: !match.flipped });
@@ -495,7 +502,11 @@ document.addEventListener('click', async event => {
     const winner = action === 'edit' ? match.points[index].winner : Number(target.dataset.winner);
     draft = { index, winner, category: index === null ? 'other' : match.points[index].category,
       actor: index === null ? match.teams[winner].players[0].id : match.points[index].actor };
-    renderPointDialog();
+    if (match.mode === 'simple') {
+      draft.category = 'simple';
+      draft.actor = null;
+      savePoint();
+    } else renderPointDialog();
   }
   if (action === 'category') { draft.category = target.dataset.category; renderPointDialog(); }
   if (action === 'winner') { draft.winner = Number(target.dataset.winner); renderPointDialog(); }
@@ -594,7 +605,7 @@ document.addEventListener('submit', event => {
     [fromSlot(first), fromSlot(data.get('second')), fromSlot(`${first[0]}-${1 - Number(first[2])}`),
       fromSlot(`${data.get('second')[0]}-${1 - Number(data.get('second')[2])}`)];
   const now = Date.now();
-  const match = { id: uid(), type, description: data.get('description').trim(), teams, serveOrder, points: [], createdAt: now,
+  const match = { id: uid(), type, mode: setupMode, description: data.get('description').trim(), teams, serveOrder, points: [], createdAt: now,
     startedAt: null, endedAt: null, elapsedMs: 0, runningSince: null, pausedAt: null, result: null, flipped: false };
   if (persist([...matches, match])) { currentId = match.id; view = 'match'; photos = {}; render(); }
 });
