@@ -1,0 +1,13 @@
+{
+  "name": "Cancha · Tablero de tenis",
+  "short_name": "Cancha",
+  "description": "Tanteador y estadísticas de tenis para jueces de silla",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f4ec",
+  "theme_color": "#142d27",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
